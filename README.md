@@ -1,2 +1,3 @@
 # mitotools
-mitogenoe analysis related scripts
+
+Share some scripts I usually use
