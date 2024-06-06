@@ -1,6 +1,6 @@
 /**
  * @file    script.c
- * @brief   Identify horizontal gene transfer (HGT) genes
+ * @brief   Identification of genes located in homologous fragments
  *
  * @author  hanfc
  * @date    2024/06/05
@@ -50,9 +50,9 @@ void find_transfer_genes(Gene *genes, int gene_count, Blastn *alignments, int al
 void free_memory(Gene *genes, Blastn *alignments);
 
 void print_usage(const char *program_name) {
-    fprintf(stderr, "Usage: %s -t <transfer_file> -l <location_file> -o <output_file>\n", program_name);
+    fprintf(stderr, "Usage: %s -t <blastn_file> -l <location_file> -o <output_file>\n", program_name);
     fprintf(stderr, "Required options:\n");
-    fprintf(stderr, "   -t, --transfer  Gene transfer file\n");
+    fprintf(stderr, "   -t, --transfer  Blastn file\n");
     fprintf(stderr, "   -l, --location  Gene location file\n");
     fprintf(stderr, "   -o, --output    Output file\n");
     fprintf(stderr, "Optional options:\n");
