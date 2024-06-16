@@ -14,13 +14,41 @@
 #include <string.h>
 #include <ctype.h>
 #include <unistd.h>
+#include <time.h>
+#include <stdarg.h>
 
 
 #define MAX_LINE_LEN 1024
 #define MAX_GENE_LEN 100
 #define MAX_LOCATION_LEN 100
-// #define MAX_SEQUENCE_LEN 1000000
 #define MIN_SEQUENCE_LEN 10000
+
+
+
+#define INFO    "INFO"
+#define ERROR   "ERROR"
+#define WARNING "WARNING"
+
+void log_print(const char *level, const char *fmt, ...) {
+    va_list args;
+    time_t rawtime;
+    struct tm *timeinfo;
+
+    // 获取当前时间
+    time(&rawtime);
+    timeinfo = localtime(&rawtime);
+
+    // 格式化时间字符串
+    char time_buffer[80];
+    strftime(time_buffer, 80, "%Y-%m-%d %H:%M:%S", timeinfo);
+
+    // 打印日志
+    fprintf(stderr, "[%s] %s: ", time_buffer, level);
+    va_start(args, fmt);
+    vfprintf(stderr, fmt, args);
+    va_end(args);
+    fprintf(stderr, "\n");
+}
 
 
 // Function prototypes
@@ -51,7 +79,7 @@ void parse_arguments(int argc, char *argv[], char *genbank_file, char *prefix, i
                 char *genbank_path = argv[++i];
                 strcpy(genbank_file, genbank_path);
             } else {
-                fprintf(stderr, "Error: Missing genbank file argument\n");
+                log_print(ERROR, "Missing genbank file argument");
                 print_usage(argv[0]);
                 exit(EXIT_FAILURE);
             }
@@ -83,20 +111,20 @@ void parse_arguments(int argc, char *argv[], char *genbank_file, char *prefix, i
             print_usage(argv[0]);
             exit(EXIT_SUCCESS);
         } else {
-            fprintf(stderr, "Error: Invalid option '%s'\n", argv[i]);
+            log_print(ERROR, "Invalid option '%s'", argv[i]);
             print_usage(argv[0]);
             exit(EXIT_FAILURE);
         }
     }
 
     if (strlen(genbank_file) == 0) {
-        fprintf(stderr, "Error: Please provide all required arguments\n");
+        log_print(ERROR, "Please provide all required arguments");
         print_usage(argv[0]);
         exit(EXIT_FAILURE);
     } else {
         char *ext = strrchr(genbank_file, '.'); // get the extension of the file name
         if (strcmp(ext, ".gb") != 0) { // check if the extension is ".gb"
-            fprintf(stderr, "Error: Genbank file must have a extension (.gb)\n");
+            log_print(ERROR, "Genbank file must have a extension (.gb)");
             print_usage(argv[0]);
             exit(EXIT_FAILURE);
         } else {
@@ -105,7 +133,7 @@ void parse_arguments(int argc, char *argv[], char *genbank_file, char *prefix, i
 
             if (bnm == NULL) 
             {
-                fprintf(stderr, "Error: Failed to allocate memory for base name\n");
+                log_print(ERROR, "Failed to allocate memory for base name");
                 exit(EXIT_FAILURE);
             }
             strncpy(bnm, genbank_file, bnmlen);
@@ -113,16 +141,23 @@ void parse_arguments(int argc, char *argv[], char *genbank_file, char *prefix, i
 
             if (strlen(prefix) == 0) {
                 // prefix = strrchr(bnm, '/') + 1;
-                strcpy(prefix, strrchr(bnm, '/') + 1);
+                if (strstr(bnm, "/") == NULL) {
+                    strcpy(prefix, bnm);
+                } else {
+                    strcpy(prefix, strrchr(bnm, '/') + 1);
+                }
             }
 
             if (strlen(output_file) == 0)
             {
-                char *last_prefix = strrchr(bnm, '/') + 1;
-                size_t outlen = last_prefix - bnm;
-                strncpy(output_file, bnm, outlen);
-                output_file[outlen] = '\0';
-                printf("The output file is: %s", output_file);
+                if (strstr(bnm, "/") == NULL) {
+                    strcpy(output_file, "./");
+                } else {
+                    char *last_prefix = strrchr(bnm, '/') + 1;
+                    size_t outlen = last_prefix - bnm;
+                    strncpy(output_file, bnm, outlen);
+                    output_file[outlen] = '\0';
+                }
             } 
             free(bnm);
         }
@@ -192,7 +227,7 @@ char* subseq(const char* str, int start, int end) {
     int len = end - start + 1;
     char *sub = (char*)malloc((len + 1) * sizeof(char));
     if (end >= strlen(str)) {
-        fprintf(stderr, "Error: Invalid location '%d..%d'\n", start, end);
+        log_print(ERROR, "Invalid location '%d..%d'", start, end);
         exit(EXIT_FAILURE);
     }
     strncpy(sub, str + start, len);
@@ -279,7 +314,7 @@ char* extract_sequence(char *seq, char *location) {
                 char *rc_subseq = subseq(seq, l_loc, r_loc);
                 // char *tk_subseq = malloc(strlen(rc_subseq) + 1);
                 tk_subseq = reverse_complement(rc_subseq);
-                // free(rc_subseq);
+                free(rc_subseq);
             } else {
                 int l_loc = 0, r_loc = 0;
                 sscanf(tk_loc, "%d..%d", &l_loc, &r_loc);
@@ -296,7 +331,7 @@ char* extract_sequence(char *seq, char *location) {
                 sscanf(tokendot, "%d..%d", &l_loc, &r_loc);
                 char *temp_subseq = subseq(seq, l_loc, r_loc);
                 strcat(cm_subseq, temp_subseq);
-                // free(temp_subseq);
+                free(temp_subseq);
                 tokendot = strtok(NULL, ",");
             }
             tk_subseq =  reverse_complement(cm_subseq);
@@ -313,13 +348,13 @@ char* extract_sequence(char *seq, char *location) {
                 char *temp_subseq = subseq(seq, l_loc, r_loc);
                 char *rc_temp_subseq = reverse_complement(temp_subseq);
                 strcat(tk_subseq, rc_temp_subseq);
-                // free(temp_subseq);
-                // free(rc_temp_subseq);
+                free(temp_subseq);
+                free(rc_temp_subseq);
             } else {
                 sscanf(tokenspace, "%d..%d", &l_loc, &r_loc);
                 char *temp_subseq = subseq(seq, l_loc, r_loc);
                 strcat(tk_subseq, temp_subseq);
-                // free(temp_subseq);
+                free(temp_subseq);
             }
             tokenspace = strtok(NULL, " ");
         }
@@ -332,7 +367,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
 
     FILE *gbk = fopen(genbank_file, "r");
     if (!gbk) {
-        fprintf(stderr, "Error: Failed to open genbank file '%s'\n", genbank_file);
+        log_print(ERROR, "Failed to open genbank file '%s'", genbank_file);
         exit(EXIT_FAILURE);
     }
 
@@ -344,7 +379,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
     *rrna_list = malloc(sizeof(Rrn) * 100);
     *trna_list = malloc(sizeof(Trn) * 100);
     if (*pep_list == NULL) {
-        fprintf(stderr, "Error: Failed to allocate memory for pep_list\n");
+        log_print(ERROR, "Failed to allocate memory for pep_list");
         fclose(gbk);
         exit(EXIT_FAILURE);
     }
@@ -377,23 +412,31 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
             organ = (char *)malloc(strlen(line + 12) + 1); // allocate memory for the organism name
             if (organ == NULL)
             {
-                fprintf(stderr, "Error: Failed to allocate memory for organism name\n");
+                log_print(ERROR, "Failed to allocate memory for organism name");
                 fclose(gbk);
                 exit(EXIT_FAILURE);
             }
             strcpy(organ, line + 12);
-            printf("The organism is: %s", organ);
+            size_t len = strlen(organ);
+            if (len > 0 && organ[len - 1] == '\n') {
+                organ[len - 1] = '\0';
+            }
+            log_print(INFO, "The organism is: %s", organ);
         }
         if(strstr(line, "ACCESSION")) {
             acces = (char *)malloc(strlen(line + 12) + 1); // allocate memory for the accession
             if (acces == NULL)
             {
-                fprintf(stderr, "Error: Failed to allocate memory for accession\n");
+                log_print(ERROR, "Failed to allocate memory for accession");
                 fclose(gbk);
                 exit(EXIT_FAILURE);
             }
             strcpy(acces, line + 12);
-            printf("The accession is: %s", acces);
+            size_t len = strlen(acces);
+            if (len > 0 && acces[len - 1] == '\n') {
+                acces[len - 1] = '\0';
+            }
+            log_print(INFO, "The accession is: %s", acces);
         }
 
         char seq1[60] = "";
@@ -405,6 +448,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
         char temp_faa[60 * 6] = "";
         if (strstr(line, "ORIGIN")) {
             (*faa)->sequence = malloc(1);
+            memset((*faa)->sequence, 0, 1);
             faa_flag = 1;
         } else if (faa_flag == 1) {
             sscanf(line, "        %*d %s %s %s %s %s %s", seq1, seq2, seq3, seq4, seq5, seq6);
@@ -412,7 +456,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
             (*faa)->sequence = realloc((*faa)->sequence, strlen((*faa)->sequence) + strlen(temp_faa) + 1);
             if ((*faa)->sequence == NULL)
             {
-                fprintf(stderr, "Error: gb file format error or incomplete sequence.\n");
+                log_print(ERROR, "Failed to allocate memory for faa sequence");
                 fclose(gbk);
                 exit(EXIT_FAILURE);
             }
@@ -423,13 +467,12 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 temp_faa[i] = toupper(temp_faa[i]);
                 i++;
             }
-            
+            // printf("The sequence is: %s\n", temp_faa);
             strcat((*faa)->sequence, temp_faa);
         }
     }
-
-    if ((*faa)->sequence == NULL) {
-        fprintf(stderr, "Error: gb file format error or incomplete sequence.\n");
+    if ((*faa)->sequence == NULL || faa_flag != 1) {
+        log_print(ERROR, "gb file format error or incomplete sequence.");
         fclose(gbk);
         exit(EXIT_FAILURE);
     }
@@ -438,10 +481,10 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
         (*faa)->gene = malloc(strlen(organ) + 2);
     } else {
         organ = malloc(6);
-        strcpy(organ, "Chr1\n");
+        strcpy(organ, "Chr1");
         (*faa)->gene = malloc(strlen(organ) + 2);
     }
-    sprintf((*faa)->gene, "%s", organ);
+    sprintf((*faa)->gene, "%s\n", organ);
 
 
     rewind(gbk); // rewind the file to the beginning
@@ -456,7 +499,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*cds_list)[*cds_count].location = malloc(strlen(temp_loc) + 1);
                 if ((*cds_list)[*cds_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to allocate memory for cds location\n");
+                    log_print(ERROR, "Failed to allocate memory for cds location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }                
@@ -467,7 +510,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
 
                 if ((*cds_list)[*cds_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to allocate memory for cds location\n");
+                    log_print(ERROR, "Failed to allocate memory for cds location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }                
@@ -483,7 +526,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*cds_list)[*cds_count].location = realloc((*cds_list)[*cds_count].location, strlen((*cds_list)[*cds_count].location) + strlen(temp_loc) + 1);
                 if ((*cds_list)[*cds_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for cds location\n");
+                    log_print(ERROR, "Failed to reallocate memory for cds location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -493,7 +536,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*cds_list)[*cds_count].location = realloc((*cds_list)[*cds_count].location, strlen((*cds_list)[*cds_count].location) + strlen(temp_loc) + 1);
                 if ((*cds_list)[*cds_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for cds location\n");
+                    log_print(ERROR, "Failed to reallocate memory for cds location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -512,7 +555,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
             // *pep_list = realloc(*pep_list, sizeof(Pep) * ((*cds_count) + 1)); 
             if ((*pep_list)[*cds_count].gene == NULL) 
             {
-                fprintf(stderr, "Error: Failed to reallocate memory for pep_list gene\n");
+                log_print(ERROR, "Failed to reallocate memory for pep_list gene");
                 fclose(gbk);
                 exit(EXIT_FAILURE);
             }
@@ -528,14 +571,14 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 sscanf(line, "                     /translation=\"%[^\"]\"", temp_seq);
                 if (strlen(temp_seq) >= MIN_SEQUENCE_LEN) 
                 {
-                    fprintf(stderr, "Error: Sequence length exceeds limit\n");
+                    log_print(ERROR, "Sequence length exceeds limit");
                     break;
                 }
                 (*pep_list)[*cds_count].sequence = malloc(strlen(temp_seq) + 1);
 
                 if ((*pep_list)[*cds_count].sequence == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for pep_list sequence\n");
+                    log_print(ERROR, "Failed to reallocate memory for pep_list sequence");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -549,7 +592,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 sscanf(line, "                     /translation=\"%[^\n]", temp_seq);
                 if (strlen(temp_seq) >= MIN_SEQUENCE_LEN) 
                 {
-                    fprintf(stderr, "Error: Sequence length exceeds limit\n");
+                    log_print(ERROR, "Sequence length exceeds limit");
                     break;
                 }
 
@@ -557,7 +600,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
 
                 if ((*pep_list)[*cds_count].sequence == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for pep_list sequence\n");
+                    log_print(ERROR, "Failed to reallocate memory for pep_list sequence");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }                
@@ -571,14 +614,14 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 sscanf(line, "                     %[^\"]", temp_seq);
                 if ((strlen((*pep_list)[*cds_count].sequence) + strlen(temp_seq)) >= MIN_SEQUENCE_LEN) 
                 {
-                    fprintf(stderr, "Error: Sequence length exceeds limit\n");
+                    log_print(ERROR, "Sequence length exceeds limit");
                     break;
                 }
 
                 (*pep_list)[*cds_count].sequence = realloc((*pep_list)[*cds_count].sequence, strlen((*pep_list)[*cds_count].sequence) + strlen(temp_seq) + 1);
                 if ((*pep_list)[*cds_count].sequence == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for pep_list sequence\n");
+                    log_print(ERROR, "Failed to reallocate memory for pep_list sequence");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -590,13 +633,13 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 sscanf(line, "                     %[^\n]", temp_seq);
                 if ((strlen((*pep_list)[*cds_count].sequence) + strlen(temp_seq)) >= MIN_SEQUENCE_LEN) 
                 {
-                    fprintf(stderr, "Error: Sequence length exceeds limit\n");
+                    log_print(ERROR, "Sequence length exceeds limit");
                     break;
                 }
                 (*pep_list)[*cds_count].sequence = realloc((*pep_list)[*cds_count].sequence, strlen((*pep_list)[*cds_count].sequence) + strlen(temp_seq) + 1);
                 if ((*pep_list)[*cds_count].sequence == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for pep_list sequence\n");
+                    log_print(ERROR, "Failed to reallocate memory for pep_list sequence");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -610,7 +653,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*rrna_list)[*rna_count].location = malloc(strlen(temp_loc) + 1);
                 if ((*rrna_list)[*rna_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to allocate memory for rRNA location\n");
+                    log_print(ERROR, "Failed to allocate memory for rRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }                
@@ -621,7 +664,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
 
                 if ((*rrna_list)[*rna_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to allocate memory for rRNA location\n");
+                    log_print(ERROR, "Failed to allocate memory for rRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }                
@@ -637,7 +680,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*rrna_list)[*rna_count].location = realloc((*rrna_list)[*rna_count].location, strlen((*rrna_list)[*rna_count].location) + strlen(temp_loc) + 1);
                 if ((*rrna_list)[*rna_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for rRNA location\n");
+                    log_print(ERROR, "Failed to reallocate memory for rRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -647,7 +690,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*rrna_list)[*rna_count].location = realloc((*rrna_list)[*rna_count].location, strlen((*rrna_list)[*rna_count].location) + strlen(temp_loc) + 1);
                 if ((*rrna_list)[*rna_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for rRNA location\n");
+                    log_print(ERROR, "Failed to reallocate memory for rRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -664,7 +707,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
             
             if ((*rrna_list)[*rna_count].gene == NULL) 
             {
-                fprintf(stderr, "Error: Failed to reallocate memory for pep_list gene\n");
+                log_print(ERROR, "Failed to reallocate memory for pep_list gene");
                 fclose(gbk);
                 exit(EXIT_FAILURE);
             }
@@ -680,7 +723,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*trna_list)[*trn_count].location = malloc(strlen(temp_loc) + 1);
                 if ((*trna_list)[*trn_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to allocate memory for tRNA location\n");
+                    log_print(ERROR, "Failed to allocate memory for tRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }                
@@ -691,7 +734,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
 
                 if ((*trna_list)[*trn_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to allocate memory for tRNA location\n");
+                    log_print(ERROR, "Failed to allocate memory for tRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }                
@@ -707,7 +750,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*trna_list)[*trn_count].location = realloc((*trna_list)[*trn_count].location, strlen((*trna_list)[*trn_count].location) + strlen(temp_loc) + 1);
                 if ((*trna_list)[*trn_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for tRNA location\n");
+                    log_print(ERROR, "Failed to reallocate memory for tRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -717,7 +760,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
                 (*trna_list)[*trn_count].location = realloc((*trna_list)[*trn_count].location, strlen((*trna_list)[*trn_count].location) + strlen(temp_loc) + 1);
                 if ((*trna_list)[*trn_count].location == NULL)
                 {
-                    fprintf(stderr, "Error: Failed to reallocate memory for tRNA location\n");
+                    log_print(ERROR, "Failed to reallocate memory for tRNA location");
                     fclose(gbk);
                     exit(EXIT_FAILURE);
                 }
@@ -733,7 +776,7 @@ void extract_annotation(int *cds_count, int *rna_count, int *trn_count, Cds **cd
             
             if ((*trna_list)[*trn_count].gene == NULL) 
             {
-                fprintf(stderr, "Error: Failed to reallocate memory for pep_list gene\n");
+                log_print(ERROR, "Failed to reallocate memory for pep_list gene");
                 fclose(gbk);
                 exit(EXIT_FAILURE);
             }
@@ -762,12 +805,20 @@ int main(int argc, char *argv[]) {
     char *output_file = malloc(1024);
     
     parse_arguments(argc, argv, genbank_file, prefix, &all_flag, &faa_flag, &pep_flag, &cds_flag, &trn_flag, &rrn_flag, output_file);
-    printf("[Info] The genbank file: %s\n", genbank_file);
-    printf("[Info] The prefix: %s\n", prefix);
-    printf("[Info] The output path: %s\n", output_file);
+
+    if (access(genbank_file, F_OK) == -1) {
+        log_print(ERROR, "%s does not exist (gb).", genbank_file);
+        free(genbank_file);
+        free(prefix);
+        free(output_file);
+        exit(1);
+    }
+    log_print(INFO, "The genbank file: %s", genbank_file);
+    log_print(INFO, "The prefix: %s", prefix);
+    log_print(INFO, "The output path: %s", output_file);
 
     if (access(output_file, F_OK) == -1) {
-        printf("[error] Output Path does not exist.\n");
+        log_print(ERROR, "Output Path does not exist.");
         exit(1);
     }
     
@@ -782,19 +833,18 @@ int main(int argc, char *argv[]) {
     int rrn_count = 0;
     int trn_count = 0;
 
-    // if (!cds_list || !faa || !pep_list || !rrn_list || !trn_list) {
-    //     fprintf(stderr, "Error: Failed to allocate memory\n");
-    //     return 1;
-    // }
 
 
     extract_annotation(&cds_count, &rrn_count, &trn_count, &cds_list, &faa, &pep_list, &rrn_list, &trn_list, genbank_file);
 
+    size_t len = strlen(output_file);
+    if (len > 0 && output_file[len - 1] != '/') {
+        strcat(output_file, "/");
+    }
     // Print the annotations
     if (cds_flag == 1) {
         char *output_cds = malloc(1024);
         strcpy(output_cds, output_file);
-        strcat(output_cds, "/");
         strcat(output_cds, prefix);
         strcat(output_cds, ".cds");
         FILE *fcds = fopen(output_cds, "w");
@@ -804,12 +854,12 @@ int main(int argc, char *argv[]) {
             fprintf(fcds, "%s\n", cds_list[i].sequence);
         }
         fclose(fcds);
+        log_print(INFO, "CDS sequences saved to %s", output_cds);
     }
 
     if (rrn_flag == 1) {
         char *output_rrn = malloc(1024);
         strcpy(output_rrn, output_file);
-        strcat(output_rrn, "/");
         strcat(output_rrn, prefix);
         strcat(output_rrn, ".rrn");
         FILE *frrn = fopen(output_rrn, "w");
@@ -819,13 +869,13 @@ int main(int argc, char *argv[]) {
             fprintf(frrn, "%s\n", rrn_list[i].sequence);
         }
         fclose(frrn);
+        log_print(INFO, "rRNA sequences saved to %s", output_rrn);
     }
 
 
     if (trn_flag == 1) {
         char *output_trn = malloc(1024);
         strcpy(output_trn, output_file);
-        strcat(output_trn, "/");
         strcat(output_trn, prefix);
         strcat(output_trn, ".trn");
         FILE *ftrn = fopen(output_trn, "w");
@@ -835,13 +885,13 @@ int main(int argc, char *argv[]) {
             fprintf(ftrn, "%s\n", trn_list[i].sequence);
         }
         fclose(ftrn);
+        log_print(INFO, "tRNA sequences saved to %s", output_trn);
     }
 
     
     if (pep_flag == 1) {
         char *output_pep = malloc(1024);
         strcpy(output_pep, output_file);
-        strcat(output_pep, "/");
         strcat(output_pep, prefix);
         strcat(output_pep, ".pep");
         FILE *fpep = fopen(output_pep, "w");
@@ -851,18 +901,19 @@ int main(int argc, char *argv[]) {
             fprintf(fpep, "%s\n", pep_list[i].sequence);
         }
         fclose(fpep);
+        log_print(INFO, "Pep sequences saved to %s", output_pep);
     }
 
     if (faa_flag == 1) {
         char *output_faa = malloc(1024);
         strcpy(output_faa, output_file);
-        strcat(output_faa, "/");
         strcat(output_faa, prefix);
         strcat(output_faa, ".faa");
         FILE *ffaa = fopen(output_faa, "w");
         fprintf(ffaa, ">%s", faa->gene);
         fprintf(ffaa, "%s\n", faa->sequence);
         fclose(ffaa);
+        log_print(INFO, "Faa sequences saved to %s", output_faa);
     }
 
     // Clean up memory
@@ -873,9 +924,8 @@ int main(int argc, char *argv[]) {
     if (trn_list) free(trn_list);
     if (genbank_file) free(genbank_file);
     if (prefix) free(prefix);
-
-    // Clean up dynamically allocated strings
     if (output_file) free(output_file);
+    
     return 0;
 
 }
