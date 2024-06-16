@@ -34,15 +34,12 @@ void log_print(const char *level, const char *fmt, ...) {
     time_t rawtime;
     struct tm *timeinfo;
 
-    // 获取当前时间
     time(&rawtime);
     timeinfo = localtime(&rawtime);
 
-    // 格式化时间字符串
     char time_buffer[80];
     strftime(time_buffer, 80, "%Y-%m-%d %H:%M:%S", timeinfo);
 
-    // 打印日志
     fprintf(stderr, "[%s] %s: ", time_buffer, level);
     va_start(args, fmt);
     vfprintf(stderr, fmt, args);
